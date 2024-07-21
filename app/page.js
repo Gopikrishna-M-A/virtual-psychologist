@@ -1,113 +1,281 @@
-import Image from "next/image";
+"use client"
+import { useState, useEffect } from "react"
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
+import { sections } from "./sections"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Textarea } from "@/components/ui/textarea"
+import Image from "next/image"
+import { AudioLines, Mic, Repeat } from "lucide-react"
+import { useRouter } from "next/navigation"
 
-export default function Home() {
+export function Page() {
+  const router = useRouter()
+  const [examStarted, setExamStarted] = useState(false)
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
+  const [answer, setAnswer] = useState("")
+  const [repeat, setRepeat] = useState(true)
+  const [listening, setListening] = useState(false)
+  const [result, setResult] = useState([])
+  const [currentSection, setCurrentSection] = useState(0)
+  const [questions, setQuestions] = useState(sections[currentSection].questions)
+
+  const [timeLeft, setTimeLeft] = useState(10)
+  const [isActive, setIsActive] = useState(false)
+
+  useEffect(() => {
+    let interval = null
+    if (isActive && timeLeft > 0) {
+      interval = setInterval(() => {
+        setTimeLeft((time) => time - 1)
+      }, 1000)
+    } else if (timeLeft === 0) {
+      setIsActive(false)
+      clearInterval(interval)
+    }
+    return () => clearInterval(interval)
+  }, [isActive, timeLeft])
+
+  const startTimer = () => {
+    setIsActive(true)
+  }
+
+  const resetTimer = () => {
+    setTimeLeft(questions[currentQuestionIndex]?.time)
+    setIsActive(false)
+  }
+
+  useEffect(()=>{
+    if(timeLeft==0){
+      nextQuestion()
+    }
+  },[timeLeft])
+
+  useEffect(() => {
+    if (examStarted && currentQuestionIndex < questions.length) {
+      resetTimer()
+      const synth = window.speechSynthesis
+      const utterThis = new SpeechSynthesisUtterance(
+        questions[currentQuestionIndex].text
+      )
+      utterThis.onend = () => {
+        if (questions[currentQuestionIndex]?.type === "voice") {
+          startListening()
+        }
+      }
+
+      synth.speak(utterThis)
+      if (questions[currentQuestionIndex]?.time) {
+        startTimer()
+      }
+    }
+  }, [examStarted, currentQuestionIndex, repeat, currentSection])
+
+  const startExam = () => {
+    setExamStarted(true)
+    setResult(sections.map(section => ({ [section.name]: Array(section.questions.length).fill(null) })))
+  }
+
+  const nextQuestion = () => {
+    updateResult()
+    setAnswer("")
+    if (currentQuestionIndex < questions.length - 1) {
+      setCurrentQuestionIndex(currentQuestionIndex + 1)
+    }
+  }
+
+  const updateResult = () => {
+    setResult(prevResult => {
+      const newResult = [...prevResult]
+      console.log(result);
+      newResult[currentSection][sections[currentSection].name][currentQuestionIndex] = answer || null
+      const storedData = localStorage.getItem('SMMSEResult');
+      if (storedData) {
+        const parsedData = JSON.parse(storedData);
+        parsedData[currentSection][sections[currentSection].name][currentQuestionIndex] = answer || null;
+        localStorage.setItem('SMMSEResult', JSON.stringify(parsedData));
+      } else {
+        localStorage.setItem('SMMSEResult', JSON.stringify(newResult));
+      }
+      return newResult
+    })
+  }
+
+  const EndExam = () => {
+    updateResult()
+    router.push('/results')
+  }
+
+  const nextSection = () => {
+    updateResult()
+    setCurrentSection(currentSection + 1)
+    setQuestions(sections[currentSection + 1].questions)
+    setCurrentQuestionIndex(0)
+    setAnswer("")
+  }
+
+  const startListening = () => {
+    console.log("listenring")
+    setListening(true)
+    const recognition = new window.webkitSpeechRecognition()
+    recognition.lang = "en-US" 
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript
+      console.log("transcript", transcript)
+      setAnswer(transcript)
+      setListening(false)
+      recognition.stop()
+    }
+    recognition.onspeechend = () => {
+      console.log("Speech ended")
+      recognition.stop()
+    }
+
+    recognition.onend = () => {
+      console.log("Recognition ended")
+      setListening(false)
+    }
+
+    recognition.onerror = (event) => {
+      console.error("Recognition error", event)
+      setListening(false)
+    }
+
+    recognition.start()
+  }
+
+  const handleAnswerChange = (e) => {
+    setAnswer(e.target.value)
+  }
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 max-w-5xl w-full items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">app/page.js</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:h-auto lg:w-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{" "}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
+    <div className='grid min-h-screen w-full grid-cols-1 bg-background text-foreground md:grid-cols-[300px_1fr]'>
+      <div className='flex flex-col items-center justify-center gap-6 bg-muted p-6 md:p-10'>
+        <Avatar className='h-24 w-24'>
+          <AvatarImage src='/avatar.png' />
+          <AvatarFallback>AI</AvatarFallback>
+        </Avatar>
+        <div className='space-y-2 text-center'>
+          <h1 className='text-2xl font-bold'>Virtual SMMSE</h1>
+          <p className='text-muted-foreground'>
+            Standardized Mini-Mental State Examination
+          </p>
         </div>
+        {!examStarted ? (
+          <Button className='w-full' onClick={startExam}>
+            Start Test
+          </Button>
+        ) : currentQuestionIndex < questions.length - 1 ? (
+          <Button className='w-full' onClick={nextQuestion}>
+            Next Question
+          </Button>
+        ) : currentSection < sections.length - 1 ? (
+          <Button
+            className='w-full'
+            onClick={nextSection}>
+            Next Section
+          </Button>
+        ) : (
+          <Button className='w-full' onClick={EndExam}>
+            End Test
+          </Button>
+        )}
       </div>
-
-      <div className="relative flex place-items-center before:absolute before:h-[300px] before:w-full sm:before:w-[480px] before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-full sm:after:w-[240px] after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 before:lg:h-[360px] z-[-1]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
-      </div>
-
-      <div className="mb-32 grid text-center lg:max-w-5xl lg:w-full lg:mb-0 lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Docs{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800 hover:dark:bg-opacity-30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Learn{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Templates{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Explore starter templates for Next.js.
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Deploy{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50 text-balance`}>
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
-  );
+      <main className='flex flex-col items-center justify-center gap-8 p-6 md:p-10'>
+        <div className='grid w-full max-w-2xl gap-6'>
+          {examStarted ? (
+            <>
+              {currentQuestionIndex < questions.length && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className='flex items-center justify-between'>
+                      <div className='flex gap-3 items-center'>
+                        <Badge variant='outline'>
+                          section - {currentSection + 1}
+                        </Badge>
+                        <Badge>{sections[currentSection].name}</Badge>
+                      </div>
+                      <div className='text-gray-600'>
+                        {questions[currentQuestionIndex].time && timeLeft}
+                      </div>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <h2>
+                      <span>{currentQuestionIndex + 1}. </span>
+                      {questions[currentQuestionIndex].text}
+                    </h2>
+                    {questions[currentQuestionIndex]?.image && (
+                      <Image
+                        src={questions[currentQuestionIndex].image}
+                        width={100}
+                        height={100}
+                      />
+                    )}
+                    {questions[currentQuestionIndex].type === "voice" ? (
+                      <div>
+                        <Button
+                          onClick={() => setRepeat((prev) => !prev)}
+                          variant='ghost'
+                          size='icon'>
+                          <Repeat className='w-4 h-4' />
+                          <span className='sr-only'>Repeat Question</span>
+                        </Button>
+                        <Button
+                          variant='ghost'
+                          size='icon'
+                          className={listening && "text-green-500"}>
+                      <AudioLines  className='w-4 h-4' />
+                          <span className='sr-only'>Listening</span>
+                        </Button>
+                        <Button
+                          variant='ghost'
+                          size='icon'
+                          onClick={startListening}
+                          disabled={listening}>
+                          <Mic className='w-4 h-4' />
+                          <span className='sr-only'>Listen</span>
+                        </Button>
+                        <p>Answer:{answer}</p>
+                      </div>
+                    ) : (
+                      <Textarea
+                        value={answer}
+                        onChange={handleAnswerChange}
+                        placeholder='Your answer'
+                        className='mt-4'
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+              {currentQuestionIndex >= questions.length && (
+                <p>Questionnaire completed!</p>
+              )}
+            </>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>Welcome to the SMMSE Test</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p>
+                  This is a standardized test to assess cognitive function. The
+                  test will take approximately 10 minutes to complete. Please
+                  ensure you are in a quiet environment and can focus on the
+                  questions.
+                </p>
+                <p>
+                  Press the "Start Test" button when you are ready to begin.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </main>
+    </div>
+  )
 }
+
+export default Page
